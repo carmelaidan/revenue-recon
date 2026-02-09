@@ -1,19 +1,20 @@
 """
 Module: ai_agent.py
-Description: Generates Audit Narratives and SEO Fixes using Gemini AI.
+Description: Uses Gemini 1.5 Flash (Faster & Cheaper)
 """
 import google.generativeai as genai
 import os
+import streamlit as st
 
 # Configure Gemini
-# Ensure you have set GEMINI_API_KEY in your Streamlit Secrets!
-genai.configure(api_key=os.getenv("GEMINI_API_KEY"))
+try:
+    genai.configure(api_key=st.secrets["GEMINI_API_KEY"])
+except Exception:
+    pass # Handle missing secrets gracefully in UI
 
 def generate_audit_narrative(business_name, url, score, ssl, ports, seo, tech):
-    """
-    Generates the Executive Summary for the PDF Report.
-    """
-    model = genai.GenerativeModel('gemini-pro')
+    # CHANGED: 'gemini-pro' -> 'gemini-1.5-flash'
+    model = genai.GenerativeModel('gemini-1.5-flash')
     
     prompt = f"""
     You are a Senior Cyber Security & Digital Strategist.
@@ -40,13 +41,11 @@ def generate_audit_narrative(business_name, url, score, ssl, ports, seo, tech):
         return f"AI Error: {e}"
 
 def generate_seo_fixes(url, current_title, current_desc, industry, location):
-    """
-    NEW FUNCTION: Automatically rewrites bad SEO tags to rank higher on Google.
-    """
-    model = genai.GenerativeModel('gemini-pro')
+    # CHANGED: 'gemini-pro' -> 'gemini-1.5-flash'
+    model = genai.GenerativeModel('gemini-1.5-flash')
     
     prompt = f"""
-    You are a Google SEO Expert. I need you to rewrite the meta tags for a website to rank #1.
+    You are a Google SEO Expert. Rewrite the meta tags for a website to rank #1.
     
     TARGET:
     - Industry: {industry}
@@ -59,19 +58,9 @@ def generate_seo_fixes(url, current_title, current_desc, industry, location):
     
     TASK:
     Write 3 options for a new, high-converting <title> and <meta description>.
-    Include keywords for {industry} in {location}.
-    
-    FORMAT:
-    Option 1: [Aggressive Growth]
-    Title: ...
-    Desc: ...
-    
-    Option 2: [Trust & Authority]
-    Title: ...
-    Desc: ...
     """
     try:
         response = model.generate_content(prompt)
         return response.text
     except Exception as e:
-        return "Could not generate SEO fixes due to an API error."
+        return f"AI Error: {e}"
