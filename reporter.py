@@ -1,117 +1,129 @@
 """
 Module: reporter.py
-Description: Generates professional PDF reports with Executive Summary & Raw Data Appendix.
+Description: Generates professional PDF reports with "Sanitized" text to prevent Unicode errors.
 """
 from fpdf import FPDF
+import datetime
 
-class PDFReport(FPDF):
-    def header(self):
-        self.set_font('Arial', 'B', 15)
-        self.cell(0, 10, 'B2B Threat & Opportunity Intelligence', 0, 1, 'C')
-        self.ln(5)
+def clean_text(text):
+    """
+    Sanitizes text to ensure it works with FPDF (Latin-1 encoding).
+    Replaces smart quotes, emojis, and special symbols with standard ASCII.
+    """
+    if not isinstance(text, str):
+        return str(text)
+    
+    # 1. Map common "fancy" characters to standard ones
+    replacements = {
+        '\u2018': "'",  # Left single quote
+        '\u2019': "'",  # Right single quote
+        '\u201c': '"',  # Left double quote
+        '\u201d': '"',  # Right double quote
+        '\u2013': '-',  # En dash
+        '\u2014': '-',  # Em dash
+        '\u2026': '...', # Ellipsis
+        '\u2022': '*',  # Bullet point
+        '–': '-',       # Another dash type
+        '“': '"', 
+        '”': '"'
+    }
+    
+    for char, replacement in replacements.items():
+        text = text.replace(char, replacement)
+        
+    # 2. Force encode to Latin-1, replacing unknown chars (like emojis) with '?'
+    return text.encode('latin-1', 'replace').decode('latin-1')
 
-    def footer(self):
-        self.set_y(-15)
-        self.set_font('Arial', 'I', 8)
-        self.cell(0, 10, f'Page {self.page_no()}', 0, 0, 'C')
-
-def save_audit_report(name, url, score, ai_text, ssl_status, seo_data, ports, headers, email_sec, tech, emails, socials):
-    """Generates the Executive Audit PDF with full technical appendix."""
-    pdf = PDFReport()
+def save_audit_report(name, url, score, ai_summary, ssl, seo, ports, headers, email_sec, tech, emails, socials):
+    """
+    Generates the Executive Audit PDF.
+    """
+    pdf = FPDF()
+    pdf.set_auto_page_break(auto=True, margin=15)
     pdf.add_page()
     
-    # --- PAGE 1: EXECUTIVE SUMMARY ---
-    # Title & Score
-    pdf.set_font("Arial", 'B', 16)
-    pdf.cell(0, 10, f"Audit Report: {name}", 0, 1)
-    pdf.set_font("Arial", size=12)
-    pdf.cell(0, 10, f"Target: {url}", 0, 1)
-    pdf.ln(5)
-    
-    # Score
-    pdf.set_font("Arial", 'B', 14)
-    status = "EXCELLENT" if score > 80 else "CRITICAL RISK" if score < 50 else "NEEDS IMPROVEMENT"
-    pdf.cell(0, 10, f"Risk Score: {score}/100 ({status})", 0, 1)
-    pdf.ln(5)
-
-    # AI Narrative
-    pdf.set_fill_color(240, 240, 240) # Light gray background
-    pdf.set_font("Arial", 'B', 14)
-    pdf.cell(0, 10, "Executive Summary", 0, 1)
-    pdf.set_font("Arial", size=11)
-    pdf.multi_cell(0, 7, ai_text, border=0, fill=True)
+    # --- HEADER ---
+    pdf.set_font("Arial", 'B', 20)
+    pdf.cell(0, 10, f"Security & Growth Audit: {clean_text(name)}", ln=True, align='C')
+    pdf.set_font("Arial", 'I', 12)
+    pdf.cell(0, 10, f"Generated for: {clean_text(url)} | Date: {datetime.date.today()}", ln=True, align='C')
     pdf.ln(10)
-
-    # --- PAGE 2: TECHNICAL APPENDIX ---
+    
+    # --- EXECUTIVE SUMMARY ---
+    pdf.set_font("Arial", 'B', 16)
+    pdf.cell(0, 10, "1. Executive Strategy Analysis", ln=True)
+    pdf.ln(5)
+    
+    pdf.set_font("Arial", '', 11)
+    # Use clean_text() on the AI output
+    pdf.multi_cell(0, 7, clean_text(ai_summary))
+    pdf.ln(10)
+    
+    # --- TECHNICAL DATA APPENDIX ---
     pdf.add_page()
     pdf.set_font("Arial", 'B', 16)
-    pdf.cell(0, 10, "Appendix: Raw Technical Data", 0, 1)
+    pdf.cell(0, 10, "2. Technical Appendix", ln=True)
     pdf.ln(5)
     
-    # Section 1: Network Security
+    # Scores & SSL
     pdf.set_font("Arial", 'B', 12)
-    pdf.cell(0, 10, "1. Network & Security Infrastructure", 0, 1)
-    pdf.set_font("Arial", size=10)
+    pdf.cell(0, 10, f"Overall Risk Score: {score}/100", ln=True)
+    pdf.set_font("Arial", '', 11)
+    ssl_status = "Secure (Valid HTTPS)" if ssl else "Vulnerable (No/Expired SSL)"
+    pdf.cell(0, 7, f"SSL Status: {ssl_status}", ln=True)
     
-    secure_str = "PASS (Encrypted)" if ssl_status else "FAIL (Unencrypted)"
-    pdf.cell(0, 8, f"- SSL/TLS Certificate: {secure_str}", 0, 1)
-    
-    open_p = [p for p in ports if ports[p] != "Closed"]
-    pdf.multi_cell(0, 8, f"- Open Ports: {open_p if open_p else 'None Detected (Secure)'}")
-    
-    # Headers Loop
-    pdf.cell(0, 8, "- Security Headers:", 0, 1)
-    for header, status in headers.items():
-         pdf.cell(10) # Indent
-         pdf.cell(0, 6, f"{header}: {status}", 0, 1)
-
-    # DNS Loop
-    pdf.cell(0, 8, "- DNS Email Security:", 0, 1)
-    for record, status in email_sec.items():
-        pdf.cell(10) # Indent
-        pdf.cell(0, 6, f"{record}: {status}", 0, 1)
-    
+    # Security Headers
     pdf.ln(5)
-
-    # Section 2: Marketing & Digital Footprint
     pdf.set_font("Arial", 'B', 12)
-    pdf.cell(0, 10, "2. Marketing & SEO Health", 0, 1)
-    pdf.set_font("Arial", size=10)
-    
-    seo_str = "PASS" if seo_data.get('description') else "FAIL (Missing Description)"
-    pdf.cell(0, 8, f"- Meta Description: {seo_str}", 0, 1)
-    pdf.cell(0, 8, f"- H1 Header Tag: {seo_data.get('h1', 'Unknown')}", 0, 1)
-    pdf.cell(0, 8, f"- Mobile Viewport: {seo_data.get('viewport', 'Unknown')}", 0, 1)
-    
+    pdf.cell(0, 7, "Security Headers:", ln=True)
+    pdf.set_font("Arial", '', 10)
+    for h, v in headers.items():
+        pdf.cell(0, 6, f"{clean_text(h)}: {clean_text(str(v))}", ln=True)
+        
+    # Open Ports
     pdf.ln(5)
-
-    # Section 3: Tech Stack & Leads
     pdf.set_font("Arial", 'B', 12)
-    pdf.cell(0, 10, "3. Technology & Leads", 0, 1)
-    pdf.set_font("Arial", size=10)
-    
-    tech_str = ", ".join(tech) if tech else "Unknown"
-    pdf.multi_cell(0, 8, f"- Tech Stack Detected: {tech_str}")
-    
-    email_str = ", ".join(emails) if emails else "No public emails found."
-    pdf.multi_cell(0, 8, f"- Contact Emails: {email_str}")
-    
-    social_str = ", ".join(socials) if socials else "No social links found."
-    pdf.multi_cell(0, 8, f"- Social Accounts: {social_str}")
+    pdf.cell(0, 7, "Open Ports (Risk Vectors):", ln=True)
+    pdf.set_font("Arial", '', 10)
+    pdf.multi_cell(0, 6, clean_text(str(ports)))
 
-    filename = f"{name.replace(' ', '_')}_Full_Audit.pdf"
+    # Tech Stack
+    pdf.ln(5)
+    pdf.set_font("Arial", 'B', 12)
+    pdf.cell(0, 7, "Technology Stack:", ln=True)
+    pdf.set_font("Arial", '', 10)
+    for t in tech:
+        pdf.cell(0, 6, f"- {clean_text(t)}", ln=True)
+
+    # Emails & Socials
+    pdf.ln(5)
+    pdf.set_font("Arial", 'B', 12)
+    pdf.cell(0, 7, "Contact Data:", ln=True)
+    pdf.set_font("Arial", '', 10)
+    if emails:
+        pdf.cell(0, 6, f"Emails Found: {clean_text(str(emails))}", ln=True)
+    if socials:
+        pdf.cell(0, 6, f"Social Links: {clean_text(str(socials))}", ln=True)
+
+    # SAVE FILE
+    filename = f"{clean_text(name).replace(' ', '_')}_Audit_Report.pdf"
     pdf.output(filename)
     return filename
 
-def save_strategy_proposal(name, ai_content):
-    """Generates the Strategy PDF (Branch B)."""
-    pdf = PDFReport()
+def save_strategy_proposal(name, strategy_text):
+    """
+    Generates the Strategy Proposal PDF (No Website Found).
+    """
+    pdf = FPDF()
     pdf.add_page()
-    pdf.set_font("Arial", 'B', 16)
-    pdf.cell(0, 10, f"Digital Strategy: {name}", 0, 1)
+    
+    pdf.set_font("Arial", 'B', 20)
+    pdf.cell(0, 10, f"Digital Strategy Proposal: {clean_text(name)}", ln=True, align='C')
     pdf.ln(10)
-    pdf.set_font("Arial", size=12)
-    pdf.multi_cell(0, 8, ai_content)
-    filename = f"{name.replace(' ', '_')}_Strategy.pdf"
+    
+    pdf.set_font("Arial", '', 12)
+    pdf.multi_cell(0, 7, clean_text(strategy_text))
+    
+    filename = f"{clean_text(name).replace(' ', '_')}_Strategy.pdf"
     pdf.output(filename)
     return filename
