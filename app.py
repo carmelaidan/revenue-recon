@@ -1,11 +1,11 @@
 """
 Module: app.py
-Description: The "Auto-Consultant" Dashboard with Debug Mode & Smart Fallback
+Description: The "Auto-Consultant" Dashboard (Google API Edition)
 """
 import streamlit as st
 import pandas as pd
 import re
-from duckduckgo_search import DDGS # Imported directly for Debug Mode
+# REMOVED: from duckduckgo_search import DDGS (This caused the crash)
 from scanner import find_business_url, find_competitors
 from analyzer import check_ssl, check_seo, detect_tech_stack
 from network_scanner import scan_common_ports
@@ -16,20 +16,12 @@ from reporter import save_audit_report
 def extract_location_from_maps(url):
     """
     Extracts the city/area from a Google Maps URL.
-    Handles standard URLs and tries to parse 'place/' segments.
     """
-    if not url:
-        return ""
-    
+    if not url: return ""
     try:
-        # 1. Look for the standard 'place/City+Name' pattern
         match = re.search(r'place/([^/]+)', url)
         if match:
-            # Replace '+' with spaces and remove any trailing coordinates
-            clean_loc = match.group(1).replace('+', ' ')
-            return clean_loc.split(',')[0] # Return just the city/area name
-            
-        # 2. Fallback: If it's a short link or weird format, we might need a backup
+            return match.group(1).replace('+', ' ').split(',')[0]
     except:
         pass
     return ""
@@ -49,7 +41,7 @@ target_name = ""
 maps_link = ""
 direct_url = ""
 run_scan = False
-location_query = "" # This will hold the extracted location
+location_query = ""
 
 # --- MODE 1: BUSINESS SEARCH ---
 if mode == "🏢 Business Search (Auto-Discovery)":
@@ -59,15 +51,13 @@ if mode == "🏢 Business Search (Auto-Discovery)":
     with c2:
         maps_link = st.text_input("Google Maps Link", placeholder="Paste the full maps link here...")
     
-    # Auto-extract location if link is provided
     if maps_link:
         location_query = extract_location_from_maps(maps_link)
         if location_query:
             st.success(f"📍 Detected Location: **{location_query}**")
         else:
-            st.warning("⚠️ Could not read location from Map Link. (Scan will still proceed)")
-            # Optional: Allow manual override for location if parsing fails
-            location_query = st.text_input("Enter City/Area manually (if Map Link failed):", placeholder="e.g. Manila")
+            st.warning("⚠️ Could not read location. (Scan will still proceed)")
+            location_query = st.text_input("Enter City/Area manually:", placeholder="e.g. Manila")
     
     if st.button("🚀 Launch Scan"):
         run_scan = True
@@ -83,7 +73,7 @@ elif mode == "🔗 Self-Audit (Direct URL)":
 # --- MAIN LOGIC ---
 if run_scan:
     
-    # 1. FIND THE URL (With Debugging & Manual Override)
+    # 1. FIND THE URL
     user_url = None
     
     if direct_url:
@@ -95,72 +85,39 @@ if run_scan:
         
         search_loc = location_query if location_query else ""
         
-        # --- DEBUG SECTION START ---
-        # We run a raw search here to see what the server sees
-        with st.expander(f"🕵️ Debugging Search for: {target_name}...", expanded=True):
-            try:
-                query = f"{target_name} {search_loc} official website"
-                st.write(f"**Query:** `{query}`")
-                
-                # Direct call to DDGS to see raw results
-                raw_results = list(DDGS().text(query, max_results=5))
-                
-                if not raw_results:
-                    st.error("❌ DuckDuckGo returned 0 results.")
-                else:
-                    st.success(f"✅ Found {len(raw_results)} raw results.")
-                    for i, r in enumerate(raw_results):
-                        st.write(f"**Result {i+1}:** [{r['title']}]({r['href']})")
-                        
-                        # Simulating the filter logic
-                        skip_list = ['facebook', 'instagram', 'linkedin', 'wikipedia', 'yelp', 'yellowpages']
-                        if not any(skip in r['href'] for skip in skip_list):
-                            if not user_url:
-                                user_url = r['href']
-                                st.write(f"🎉 **Auto-Selected:** {user_url}")
-            except Exception as e:
-                st.error(f"⚠️ Search Error: {e}")
-        # --- DEBUG SECTION END ---
+        # Use the New Google API Scanner
+        with st.spinner(f"📡 Locating digital assets for {target_name} via Google API..."):
+            user_url = find_business_url(target_name, search_loc)
 
-        # If the debug loop didn't find it, try the scanner module (backup)
-        if not user_url:
-             with st.spinner(f"📡 Retrying via Scanner Module..."):
-                user_url = find_business_url(target_name, search_loc)
-
-        # --- THE SMART FALLBACK FIX ---
+        # Smart Fallback
         if not user_url:
             st.warning(f"⚠️ We couldn't auto-detect a website for '{target_name}'.")
             st.info("They might not have one (This is a sales opportunity!), or the search failed.")
             
-            # The Manual Override Input
             manual_override = st.text_input("👇 If they have a website, paste it here to continue:", placeholder="https://...")
             
             if manual_override:
                 user_url = manual_override
                 st.success(f"✅ Manual Override Accepted. Scanning {user_url}...")
             else:
-                st.error("❌ No website found or provided. Cannot proceed with Audit.")
                 st.stop()
         else:
             st.success(f"✅ Target Locked: {user_url}")
 
     # 2. COMPETITOR RADAR
     comp_data = []
-    # Only run if we have a valid location to search in
     if location_query:
-        # Guess industry from name (Simple heuristic: takes last word)
         industry_guess = target_name.split(' ')[-1] 
         
         with st.spinner(f"⚔️ Radar Active: Scanning for top-rated competitors in {location_query}..."):
-            # Clean domain for filtering
             domain_clean = user_url.replace("https://", "").replace("http://", "").split("/")[0]
             competitors = find_competitors(industry_guess, location_query, domain_clean)
             
-            # Lite Scan on Competitors
             for comp in competitors:
+                # Lite Scan on Competitors
                 c_ssl = check_ssl(comp['url'])
                 c_tech = detect_tech_stack(comp['url'])
-                c_score = 90 if c_ssl else 40 # Simple score for speed
+                c_score = 90 if c_ssl else 40 
                 comp_data.append({
                     "Name": comp['name'],
                     "URL": comp['url'],
@@ -190,14 +147,13 @@ if run_scan:
     # --- DISPLAY: BATTLEFIELD ---
     if comp_data:
         st.subheader("⚔️ Market Battlefield")
-        # Add User
         all_data = [{"Name": f"{target_name} (You)", "URL": user_url, "Score": score, "Tech": len(tech), "SSL": "✅" if ssl else "❌"}] + comp_data
         df = pd.DataFrame(all_data)
         st.dataframe(df.style.highlight_max(axis=0, subset=['Score'], color='#d4edda'), use_container_width=True)
 
     st.divider()
 
-    # --- DISPLAY: SEO AUTO-FIXER (The "Consultant" Feature) ---
+    # --- DISPLAY: SEO AUTO-FIXER ---
     st.subheader("🛠️ Automated SEO Fixer")
     
     col1, col2 = st.columns(2)
@@ -217,7 +173,6 @@ if run_scan:
         st.caption("AI Optimization")
         if st.button("✨ Generate Google-Ranking Tags"):
             with st.spinner("Rewriting content for Google dominance..."):
-                # Call the AI function
                 fixed_content = generate_seo_fixes(user_url, seo.get('title'), seo.get('description'), target_name, location_query)
                 st.success("Optimization Complete!")
                 st.code(fixed_content, language="markdown")
@@ -229,8 +184,3 @@ if run_scan:
         ai_summary = generate_audit_narrative(target_name, user_url, score, ssl, ports, seo, tech)
         
     st.info(ai_summary)
-    
-    # Save PDF (Simplified placeholder)
-    # pdf_file = save_audit_report(target_name, user_url, score, ai_summary, ssl, seo, ports, {}, False, tech, [], [])
-    # with open(pdf_file, "rb") as f:
-    #    st.download_button("Download Executive PDF", f, file_name=pdf_file)
