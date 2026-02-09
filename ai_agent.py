@@ -1,6 +1,6 @@
 """
 Module: ai_agent.py
-Description: smart AI Agent that auto-detects available Gemini models to avoid 404 errors.
+Description: smart AI Agent for Strategy (Branch B) and Executive Audits (Branch A).
 """
 
 import os
@@ -12,77 +12,83 @@ from dotenv import load_dotenv
 load_dotenv()
 
 def get_available_model(api_key):
-    """
-    Dynamically finds a working model name for the user's API key.
-    """
+    """Dynamically finds a working model name."""
     url = f"https://generativelanguage.googleapis.com/v1beta/models?key={api_key}"
     try:
         response = requests.get(url)
         if response.status_code == 200:
             models = response.json().get('models', [])
             for model in models:
-                # Look for a model that supports generation and is 'gemini'
                 if 'generateContent' in model['supportedGenerationMethods'] and 'gemini' in model['name']:
-                    # Return the clean model name (e.g., 'models/gemini-pro')
                     return model['name']
-    except Exception:
+    except:
         pass
-    
-    # Fallback if auto-discovery fails
-    return "models/gemini-2.0-flash" 
+    return "models/gemini-pro"
 
-def generate_website_strategy(business_name, location, reviews):
-    """
-    Generates a website strategy using the best available Gemini model.
-    """
+def query_gemini(prompt):
+    """Helper function to send raw requests to Gemini."""
     api_key = os.getenv("GEMINI_API_KEY")
+    if not api_key: return "Error: No API Key."
     
-    if not api_key:
-        return "ERROR: API Key not found. Please check your .env file."
-
-    # 1. Auto-Detect Model
-    print("[?] Detecting available AI models...", end=" ")
     model_name = get_available_model(api_key)
-    print(f"Using: {model_name}")
-
-    # 2. The Endpoint
-    # Note: model_name already contains 'models/', so we don't add it again
     url = f"https://generativelanguage.googleapis.com/v1beta/{model_name}:generateContent?key={api_key}"
-
-    # 3. The Headers
     headers = {"Content-Type": "application/json"}
-
-    # 4. The Prompt
-    prompt_text = f"""
-    You are a Senior Digital Marketing Strategist. 
-    A business named '{business_name}' in '{location}' has no website, but they have these Google Reviews:
-    "{reviews}"
-
-    Based ONLY on these reviews, create a brief Website Proposal. 
-    Format the output exactly like this:
+    payload = {"contents": [{"parts": [{"text prompt": prompt}]}]} # Fixed key name
     
-    1. PROPOSED DOMAIN: (Suggest a catchy .com)
-    2. HERO HEADLINE: (A catchy 1-sentence hook based on their strengths)
-    3. "ABOUT US" DRAFT: (A 2-sentence bio emphasizing what customers love)
-    4. KEY SELLING POINT: (The #1 thing mentioned in reviews)
-    """
-
-    # 5. The Payload
+    # Correct payload structure for Gemini API
     payload = {
         "contents": [{
-            "parts": [{"text": prompt_text}]
+            "parts": [{"text": prompt}]
         }]
     }
 
     try:
-        print(f"[?] Sending request to {model_name}...")
         response = requests.post(url, headers=headers, data=json.dumps(payload))
-        
         if response.status_code == 200:
-            data = response.json()
-            return data['candidates'][0]['content']['parts'][0]['text']
+            return response.json()['candidates'][0]['content']['parts'][0]['text']
         else:
-            return f"Error {response.status_code}: {response.text}"
-
+            return f"AI Error: {response.text}"
     except Exception as e:
         return f"Connection Error: {e}"
+
+# --- BRANCH B: STRATEGY (No Website) ---
+def generate_website_strategy(business_name, location, reviews):
+    prompt = f"""
+    You are a Senior Digital Strategist. A business named '{business_name}' in '{location}' has no website.
+    Reviews: "{reviews}"
+    
+    Write a Website Proposal. Format exactly like this:
+    1. PROPOSED DOMAIN: (Name)
+    2. HERO HEADLINE: (One sentence)
+    3. STRATEGY SUMMARY: (3 sentences on how a website will solve their specific problems based on reviews)
+    4. KEY SELLING POINT: (The main hook)
+    """
+    return query_gemini(prompt)
+
+# --- BRANCH A: EXECUTIVE AUDIT (Website Exists) ---
+def generate_audit_narrative(business_name, url, score, ssl, ports, seo, tech_stack):
+    """
+    Analyzes technical scan data and writes a professional executive summary.
+    """
+    prompt = f"""
+    You are a Cyber Security & Marketing Consultant. You just ran an audit on: {business_name} ({url}).
+    
+    DATA FINDINGS:
+    - Overall Risk Score: {score}/100 (Lower is worse)
+    - SSL Certificate: {"Secure" if ssl else "CRITICAL FAIL (Not Secure)"}
+    - Open Ports: {ports}
+    - SEO Meta Description: {"Present" if seo.get('description') else "MISSING (Invisible to Google)"}
+    - Tech Stack: {tech_stack}
+    
+    TASK:
+    Write a professional Executive Summary (max 150 words).
+    Do NOT just list the data again. Interpret it.
+    
+    Structure:
+    1. **Security Posture**: Evaluate their risk level. Mention the SSL and ports implications.
+    2. **Digital Presence**: Critique their SEO and tech stack. Are they modern or outdated?
+    3. **Strategic Recommendation**: Give 1 actionable next step.
+    
+    Tone: Professional, direct, and authoritative.
+    """
+    return query_gemini(prompt)
