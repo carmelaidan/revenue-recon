@@ -11,8 +11,9 @@ from ai_agent import generate_website_strategy, generate_audit_narrative
 from reporter import save_audit_report, save_strategy_proposal
 
 # --- PAGE CONFIG ---
-st.set_page_config(page_title="B2B Intel Suite", page_icon="🕵️‍♂️", layout="wide")
-st.title("🕵️‍♂️ B2B Threat & Opportunity Intelligence Suite")
+st.set_page_config(page_title="Revenue Recon", page_icon="🕵️‍♂️", layout="wide")
+st.title("Revenue Recon")
+st.caption("B2B Threat & Opportunity Intelligence Suite")
 st.markdown("---")
 
 # --- TABS FOR USER MODE ---
