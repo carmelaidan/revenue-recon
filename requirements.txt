@@ -6,3 +6,4 @@ requests
 dnspython
 duckduckgo-search
 pandas
+googlesearch-python

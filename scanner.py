@@ -1,15 +1,18 @@
 """
 Module: scanner.py
-Description: OSINT Discovery Engine with Smart Filtering
+Description: Hybrid OSINT Engine (DuckDuckGo + Google Backup)
 """
 from duckduckgo_search import DDGS
+try:
+    from googlesearch import search as google_search
+except ImportError:
+    google_search = None
 import time
 
 def find_business_url(name, location):
     """
-    Finds the official website, skipping Social Media and Wikipedia.
+    Finds the official website using a Hybrid approach (DDG -> Google).
     """
-    # Broader query works better than "official site" sometimes
     query = f"{name} {location} official website"
     print(f"[*] Radar: Searching for {query}...")
     
@@ -18,61 +21,74 @@ def find_business_url(name, location):
         'facebook.com', 'instagram.com', 'linkedin.com', 
         'wikipedia.org', 'yelp.com', 'tripadvisor.com', 
         'yellowpages.com', 'youtube.com', 'tiktok.com',
-        'glassdoor.com', 'bloomberg.com'
+        'glassdoor.com', 'bloomberg.com', 'crunchbase.com'
     ]
-    
+
+    # --- ATTEMPT 1: DUCKDUCKGO ---
     try:
-        # Get top 5 results to look through
+        print("[*] Trying DuckDuckGo...")
         results = DDGS().text(query, max_results=5)
-        
         if results:
             for r in results:
                 url = r['href']
-                # If the URL does NOT contain any word from our skip list, it's likely the real site
                 if not any(skip in url for skip in skip_list):
-                    print(f"[*] Found valid site: {url}")
                     return url
-                    
-            # If we looped through all 5 and they were ALL social media, return the first one as a backup
-            # (Or return None if you prefer strict mode)
-            print("[!] Only found social/directory links.")
-            return None
-            
     except Exception as e:
-        print(f"[!] Radar Error: {e}")
+        print(f"[!] DDG Failed: {e}")
+
+    # --- ATTEMPT 2: GOOGLE (BACKUP) ---
+    if google_search:
+        try:
+            print("[*] DDG failed/blocked. Switching to Google Backup...")
+            # Google search yields URLs directly
+            for url in google_search(query, num_results=5):
+                if not any(skip in url for skip in skip_list):
+                    return url
+        except Exception as e:
+            print(f"[!] Google Backup Failed: {e}")
+
     return None
 
-def find_competitors(industry, location, user_domain, limit=2):
+def find_competitors(industry, location, user_domain, limit=3):
     """
-    Automated Market Radar: Finds top competitors in the area.
+    Automated Market Radar: Finds top competitors using Hybrid Search.
     """
     query = f"top rated {industry} in {location}"
-    print(f"[*] Radar: Scanning market for '{query}'...")
-    
     competitors = []
+    
+    # Common filters for competitor search
+    skip_list = ['yelp', 'yellowpages', 'facebook', 'instagram', 'linkedin', 'tripadvisor', 'wikipedia']
+
+    # --- ATTEMPT 1: DUCKDUCKGO ---
     try:
-        # Fetch more results to filter effectively
         results = DDGS().text(query, max_results=10)
-        
         for r in results:
             url = r['href']
             title = r['title']
             
-            # FILTERS:
-            # 1. Skip the user's own website
-            if user_domain in url:
-                continue
-            # 2. Skip directory sites (Reuse the skip logic if needed, but simplified here)
-            skip_list = ['yelp', 'yellowpages', 'facebook', 'instagram', 'linkedin', 'tripadvisor', 'wikipedia']
-            if any(x in url for x in skip_list):
-                continue
+            if user_domain in url: continue
+            if any(x in url for x in skip_list): continue
                 
             competitors.append({"name": title, "url": url})
+            if len(competitors) >= limit: return competitors
             
-            if len(competitors) >= limit:
-                break
-                
     except Exception as e:
-        print(f"[!] Competitor Scan Error: {e}")
-        
+        print(f"[!] DDG Competitor Scan Error: {e}")
+
+    # --- ATTEMPT 2: GOOGLE (BACKUP) ---
+    # Note: google_search only returns URLs, not Titles, so we guess the title from the URL
+    if not competitors and google_search:
+        try:
+            for url in google_search(query, num_results=10):
+                if user_domain in url: continue
+                if any(x in url for x in skip_list): continue
+                
+                # Create a pretty name from the domain (e.g., www.smile.com -> Smile)
+                name = url.split("//")[-1].split("/")[0].replace("www.", "").split(".")[0].title()
+                
+                competitors.append({"name": name, "url": url})
+                if len(competitors) >= limit: return competitors
+        except Exception as e:
+            print(f"[!] Google Competitor Scan Error: {e}")
+
     return competitors
