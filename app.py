@@ -84,8 +84,17 @@ if run_scan:
             user_url = find_business_url(target_name, search_loc)
 
     if not user_url:
-        st.error("❌ Could not find a website. Try Direct Mode.")
-        st.stop()
+        st.warning(f"⚠️ We couldn't auto-detect a website for '{target_name}'.")
+        st.info("They might not have one (Good for selling web design!), or the search failed.")
+        
+        # The Manual Override
+        manual_override = st.text_input("👇 If they have a website, paste it here to force the audit:", placeholder="https://...")
+        
+        if manual_override:
+            user_url = manual_override
+            st.success(f"✅ Manual Override Accepted. Scanning {user_url}...")
+        else:
+            st.stop()
 
     st.success(f"✅ Target Locked: {user_url}")
 
