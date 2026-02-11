@@ -1,6 +1,6 @@
 """
 Module: app.py
-Description: The "Auto-Consultant" Dashboard (Competitor Filtering Fixed)
+Description: The "Auto-Consultant" Dashboard (Final PDF Update)
 """
 import streamlit as st
 import pandas as pd
@@ -83,11 +83,10 @@ if not st.session_state.scan_complete:
             tech = detect_tech_stack(url)
             ports = scan_common_ports(url)
             
-            # C. COMPETITORS (Fixed Logic)
+            # C. COMPETITORS
             comps = []
             if location:
                 clean_domain = url.replace("https://", "").replace("http://", "").split("/")[0]
-                # Updated Call: Passing target_name for filtering
                 comps = find_competitors(target_name, industry_type, location, clean_domain)
 
         # 3. SAVE STATE
@@ -171,7 +170,17 @@ if st.session_state.scan_complete:
     else:
         st.info(st.session_state.ai_report)
         if st.session_state.pdf_path is None:
-            st.session_state.pdf_path = create_pdf(data['name'], data['url'], score, st.session_state.ai_report, audit['ssl'], audit['seo'], audit['tech'])
+            # Updated function call with competitors
+            st.session_state.pdf_path = create_pdf(
+                data['name'], 
+                data['url'], 
+                score, 
+                st.session_state.ai_report, 
+                audit['ssl'], 
+                audit['seo'], 
+                audit['tech'],
+                st.session_state.competitors or []
+            )
             
         with open(st.session_state.pdf_path, "rb") as f:
             st.download_button("⬇️ Download PDF Report", data=f, file_name=st.session_state.pdf_path, mime="application/pdf")

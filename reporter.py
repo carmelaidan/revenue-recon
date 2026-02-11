@@ -1,6 +1,6 @@
 """
 Module: reporter.py
-Description: Generates professional PDF Audit Reports
+Description: Generates professional PDF Audit Reports (Now with Competitor Data)
 """
 from fpdf import FPDF
 import os
@@ -10,7 +10,6 @@ def clean_text(text):
     Removes emojis and special characters that crash FPDF.
     """
     if not text: return ""
-    # Replace common emojis with text
     replacements = {
         "✅": "[PASS]", "❌": "[FAIL]", "⚠️": "[WARN]",
         "🚀": "", "🔥": "", "💰": "$", "📉": ""
@@ -18,7 +17,6 @@ def clean_text(text):
     for emoji, replacement in replacements.items():
         text = text.replace(emoji, replacement)
     
-    # Force ASCII to prevent encoding errors
     return text.encode('latin-1', 'replace').decode('latin-1')
 
 class AuditReport(FPDF):
@@ -32,9 +30,9 @@ class AuditReport(FPDF):
         self.set_font('Arial', 'I', 8)
         self.cell(0, 10, f'Page {self.page_no()}', 0, 0, 'C')
 
-def create_pdf(business_name, url, score, ai_summary, ssl, seo, tech):
+def create_pdf(business_name, url, score, ai_summary, ssl, seo, tech, competitors):
     """
-    Generates the PDF file and returns the filename.
+    Generates the PDF file with Competitor Intel.
     """
     pdf = AuditReport()
     pdf.add_page()
@@ -66,17 +64,33 @@ def create_pdf(business_name, url, score, ai_summary, ssl, seo, tech):
     tech_list = ", ".join(tech) if tech else "None Detected"
     pdf.cell(0, 8, f"- Technology Stack: {clean_text(tech_list)}", 0, 1)
     pdf.ln(5)
+
+    # 4. Market Battlefield (Competitors)
+    pdf.set_font("Arial", 'B', 12)
+    pdf.cell(0, 10, "Market Battlefield (Identified Competitors):", 0, 1)
+    pdf.set_font("Arial", '', 10)
     
-    # 4. AI Executive Summary
+    if competitors:
+        for comp in competitors:
+            c_name = clean_text(comp['name'])
+            c_url = clean_text(comp['url'])
+            # Format: "- Edsa Shangri-La (http://...)"
+            pdf.cell(0, 7, f"- {c_name}", 0, 1)
+            pdf.set_font("Arial", 'I', 9)
+            pdf.cell(0, 5, f"  URL: {c_url}", 0, 1)
+            pdf.set_font("Arial", '', 10)
+    else:
+        pdf.cell(0, 7, "No direct competitors detected in immediate vicinity.", 0, 1)
+    pdf.ln(5)
+    
+    # 5. AI Executive Summary
     pdf.set_font("Arial", 'B', 12)
     pdf.cell(0, 10, "Executive Summary & Strategy:", 0, 1)
     pdf.set_font("Arial", '', 11)
-    
-    # Multi-cell allows text wrapping for long AI paragraphs
     pdf.multi_cell(0, 7, clean_text(ai_summary))
     pdf.ln(5)
     
-    # 5. Call to Action
+    # 6. Call to Action
     pdf.set_font("Arial", 'B', 12)
     pdf.set_text_color(0, 100, 0)
     pdf.cell(0, 10, "RECOMMENDATION: Immediate Website Optimization Required.", 0, 1)
