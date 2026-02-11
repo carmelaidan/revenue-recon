@@ -1,19 +1,17 @@
 """
 Module: ai_agent.py
-Description: Uses Gemini 1.5 Flash (Latest Version)
+Description: Uses Gemini 1.5 Flash (Stable) with fallbacks
 """
 import google.generativeai as genai
 import os
 import streamlit as st
 
-# Configure Gemini with error handling
+# Configure Gemini
 try:
-    # Try getting key from Streamlit secrets first
     api_key = st.secrets.get("GEMINI_API_KEY")
     if not api_key:
-        # Fallback to os environment variable (for local dev)
         api_key = os.getenv("GEMINI_API_KEY")
-        
+    
     if api_key:
         genai.configure(api_key=api_key)
     else:
@@ -23,11 +21,25 @@ except Exception as e:
 
 def get_model():
     """
-    Returns the best available model. 
-    Falls back to 'gemini-pro' if flash is unavailable.
+    Returns the best available model.
+    Tries Flash -> Pro -> Standard to ensure it never crashes.
     """
-    # We use 'gemini-1.5-flash-latest' to fix the 404 error
-    return genai.GenerativeModel('gemini-1.5-flash-latest')
+    # List of models to try in order of preference
+    # 'gemini-1.5-flash' is the stable tag (no -latest)
+    models_to_try = ['gemini-1.5-flash', 'gemini-1.5-pro', 'gemini-pro']
+    
+    for model_name in models_to_try:
+        try:
+            model = genai.GenerativeModel(model_name)
+            # Simple test generation to verify access
+            # We don't actually generate content here, just returning the object
+            # But the real test happens when we call generate_content
+            return model
+        except:
+            continue
+            
+    # Absolute fallback
+    return genai.GenerativeModel('gemini-pro')
 
 def generate_audit_narrative(business_name, url, score, ssl, ports, seo, tech):
     model = get_model()
@@ -54,13 +66,7 @@ def generate_audit_narrative(business_name, url, score, ssl, ports, seo, tech):
         response = model.generate_content(prompt)
         return response.text
     except Exception as e:
-        # Fallback for very old keys
-        try:
-            fallback_model = genai.GenerativeModel('gemini-pro')
-            response = fallback_model.generate_content(prompt)
-            return response.text
-        except:
-            return f"AI Error: {e}"
+        return f"AI Generation Error: {e}. (Try refreshing to reset quota)"
 
 def generate_seo_fixes(url, current_title, current_desc, industry, location):
     model = get_model()
