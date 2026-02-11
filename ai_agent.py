@@ -1,20 +1,36 @@
 """
 Module: ai_agent.py
-Description: Uses Gemini 1.5 Flash (Faster & Cheaper)
+Description: Uses Gemini 1.5 Flash (Latest Version)
 """
 import google.generativeai as genai
 import os
 import streamlit as st
 
-# Configure Gemini
+# Configure Gemini with error handling
 try:
-    genai.configure(api_key=st.secrets["GEMINI_API_KEY"])
-except Exception:
-    pass # Handle missing secrets gracefully in UI
+    # Try getting key from Streamlit secrets first
+    api_key = st.secrets.get("GEMINI_API_KEY")
+    if not api_key:
+        # Fallback to os environment variable (for local dev)
+        api_key = os.getenv("GEMINI_API_KEY")
+        
+    if api_key:
+        genai.configure(api_key=api_key)
+    else:
+        print("[!] GEMINI_API_KEY is missing.")
+except Exception as e:
+    print(f"[!] Gemini Config Error: {e}")
+
+def get_model():
+    """
+    Returns the best available model. 
+    Falls back to 'gemini-pro' if flash is unavailable.
+    """
+    # We use 'gemini-1.5-flash-latest' to fix the 404 error
+    return genai.GenerativeModel('gemini-1.5-flash-latest')
 
 def generate_audit_narrative(business_name, url, score, ssl, ports, seo, tech):
-    # CHANGED: 'gemini-pro' -> 'gemini-1.5-flash'
-    model = genai.GenerativeModel('gemini-1.5-flash')
+    model = get_model()
     
     prompt = f"""
     You are a Senior Cyber Security & Digital Strategist.
@@ -38,11 +54,16 @@ def generate_audit_narrative(business_name, url, score, ssl, ports, seo, tech):
         response = model.generate_content(prompt)
         return response.text
     except Exception as e:
-        return f"AI Error: {e}"
+        # Fallback for very old keys
+        try:
+            fallback_model = genai.GenerativeModel('gemini-pro')
+            response = fallback_model.generate_content(prompt)
+            return response.text
+        except:
+            return f"AI Error: {e}"
 
 def generate_seo_fixes(url, current_title, current_desc, industry, location):
-    # CHANGED: 'gemini-pro' -> 'gemini-1.5-flash'
-    model = genai.GenerativeModel('gemini-1.5-flash')
+    model = get_model()
     
     prompt = f"""
     You are a Google SEO Expert. Rewrite the meta tags for a website to rank #1.
